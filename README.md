@@ -24,6 +24,159 @@ If you're new to the project, this README walks you through everything you need 
 
 ---
 
+## Packages used (and *why*)
+
+Every dependency in `package.json` is here for a specific reason. If you're new, scan this once — you'll recognize names when you read the code.
+
+### Runtime dependencies
+
+| Package | Purpose | Where you see it |
+|---|---|---|
+| **react**, **react-dom** | The UI library and its browser renderer. Components, state, effects. | Everywhere |
+| **react-router-dom** | Client-side routing. Maps URLs to React components without a page reload. | `App.tsx`, `ProtectedRoute.tsx`, `Sidebar.tsx`, `Header.tsx`, `Login.tsx` |
+| **axios** | HTTP client. Cleaner API than `fetch`, plus interceptors (we use them for auth). | `lib/api-client.ts`, every service |
+| **@tanstack/react-query** | Server-state caching, deduping, refetching. Lets you call APIs from components without writing loading/error/cache plumbing yourself. | `lib/query-client.ts`, `App.tsx` (provider). Use in pages via `useQuery` / `useMutation`. |
+| **react-hook-form** | Lightweight, performance-focused form library. Manages field values, validation, submission. | `pages/Login.tsx` |
+| **@hookform/resolvers** | Adapter that lets `react-hook-form` use external validators (we use Zod). | `pages/Login.tsx` (`zodResolver`) |
+| **zod** | Schema validation. Define a schema, get parsed + typed data. We use it to validate the login form. | `pages/Login.tsx` |
+| **sonner** | Toast notifications (success/error popups). | `App.tsx` (`<Toaster />`), `pages/Login.tsx` (`toast.success`, `toast.error`) |
+| **framer-motion** | Animation library. Used for the active-item indicator in the sidebar. | `components/layout/Sidebar.tsx` (`<motion.div layoutId="active-nav" />`) |
+| **lucide-react** | Icon set as React components. Tree-shakeable — only icons you import end up in the bundle. | Sidebar, Header, Login (BrainCircuit, Bell, ChevronLeft, etc.) |
+| **clsx** | Tiny utility to conditionally join class names. | `lib/utils.ts` |
+| **tailwind-merge** | Resolves conflicting Tailwind classes (e.g. `p-2 p-4` → keeps `p-4`). | `lib/utils.ts` (combined with `clsx` to make `cn()`) |
+| **class-variance-authority** (cva) | Define class-name "variants" for components (size: sm/md/lg, variant: default/outline/ghost). | `components/ui/button.tsx` |
+| **tw-animate-css** | Adds `animate-in` / `animate-out` / `fade-in` / `zoom-in` etc. utilities used by shadcn for tooltips, dropdowns, dialogs. | `index.css` (imported), used by `tooltip.tsx`, `dropdown-menu.tsx` |
+| **@radix-ui/react-avatar** | Headless accessible avatar primitive (image with fallback). | `components/ui/avatar.tsx` |
+| **@radix-ui/react-dropdown-menu** | Accessible dropdown menu primitive (used for the user menu in the header). | `components/ui/dropdown-menu.tsx`, `components/layout/Header.tsx` |
+| **@radix-ui/react-label** | Accessible `<label>` primitive that wires up `htmlFor` correctly. | `components/ui/label.tsx` |
+| **@radix-ui/react-tooltip** | Accessible tooltip primitive (used by the collapsed sidebar). | `components/ui/tooltip.tsx`, `Sidebar.tsx` |
+| **@radix-ui/react-slot** | Lets shadcn components forward props to a child element via `asChild` (e.g. `<Button asChild><Link …/></Button>`). | `components/ui/button.tsx` |
+
+> **About shadcn/ui:** shadcn isn't an npm package — the components live directly in `src/components/ui/` so you can edit them. They're built on top of the Radix primitives and `cva` listed above.
+
+### Dev dependencies
+
+| Package | Purpose |
+|---|---|
+| **vite** | The dev server (instant hot reload) and production bundler. |
+| **@vitejs/plugin-react** | Tells Vite how to handle JSX/TSX and Fast Refresh. |
+| **tailwindcss** | The Tailwind engine (v4). Generates utility classes from your markup. |
+| **@tailwindcss/vite** | Tailwind's official Vite plugin — no separate PostCSS config needed. |
+| **typescript** | Static type checker. `tsc -b` runs as part of `npm run build`. |
+| **@types/react**, **@types/react-dom**, **@types/node** | Type definitions for libraries that ship plain JS. |
+
+---
+
+## File-by-file reference
+
+This is a tour of every file in `src/`. Skim it once and refer back when you're not sure where something belongs.
+
+### Project root
+
+| File | What it does |
+|---|---|
+| `index.html` | Vite's HTML entry. Contains `<div id="root">` and the script tag that loads `src/main.tsx`. |
+| `vite.config.ts` | Vite config: registers the React + Tailwind plugins, sets up the `@` alias, picks the dev port. |
+| `tsconfig.json` | Top-level TS config. Just references `tsconfig.app.json` (app code) and `tsconfig.node.json` (vite config). |
+| `tsconfig.app.json` | TS rules for `src/` — strict mode, JSX, the `@/*` path alias. |
+| `tsconfig.node.json` | TS rules for `vite.config.ts` (different module/target). |
+| `components.json` | Tells the shadcn CLI where to drop new components, what icon library to use, and how the `@` alias maps. |
+| `package.json` | Dependencies + npm scripts. |
+| `.env.example` | Template for the env file you'll create as `.env`. |
+| `public/` | Static files served as-is at the site root (e.g. favicons). |
+
+### `src/` — top-level
+
+| File | What it does |
+|---|---|
+| `main.tsx` | The React entry point. Calls `createRoot` and mounts `<App />` into `#root`. |
+| `App.tsx` | The composition root. Wraps the app in `QueryClientProvider`, `BrowserRouter`, `AuthProvider`, and `Toaster`. Declares the routes (`/login`, `/dashboard`, redirects). |
+| `index.css` | The single global stylesheet. Imports Tailwind, imports `tw-animate-css`, defines the design tokens (colors, radii) for **light** *and* **dark** themes via CSS variables. |
+| `vite-env.d.ts` | Ambient types for `import.meta.env` so TypeScript knows about `VITE_API_BASE_URL` and friends. |
+
+### `src/pages/`
+One file per route. Pages are the only place that should compose layout + data + interactions for a screen.
+
+| File | Role |
+|---|---|
+| `Login.tsx` | Public login form. Validates with Zod, calls `useAuth().login`, toasts on success/error, navigates to `/dashboard`. |
+| `Landing.tsx` | The dashboard (post-login landing page). Reads `user` from auth context, renders example stat cards. |
+
+### `src/components/`
+
+#### `components/ui/` — shadcn primitives
+Self-contained, styled, accessible building blocks. Edit these directly when you need a tweak — they're yours.
+
+| File | Provides |
+|---|---|
+| `button.tsx` | `<Button variant size>` with cva variants. Supports `asChild`. |
+| `input.tsx` | Styled `<input>`. |
+| `label.tsx` | Accessible label (Radix). |
+| `card.tsx` | `Card`, `CardHeader`, `CardTitle`, `CardDescription`, `CardContent`, `CardFooter`. |
+| `tooltip.tsx` | `Tooltip`, `TooltipTrigger`, `TooltipContent`, `TooltipProvider` (Radix). |
+| `avatar.tsx` | `Avatar`, `AvatarImage`, `AvatarFallback` (Radix). |
+| `dropdown-menu.tsx` | Accessible dropdown menu and its sub-parts (Radix). Used for the user menu. |
+
+#### `components/layout/` — the app shell
+
+| File | Role |
+|---|---|
+| `Sidebar.tsx` | Collapsible left sidebar. Reads nav items from `lib/nav-items.ts`, highlights the active route via `useLocation`, animates the indicator with `framer-motion`, shows tooltips when collapsed. |
+| `Header.tsx` | Top bar with notification bell and user dropdown (avatar → settings/support/logout). Reads `user` from `useAuth`, calls `logout()` and navigates to `/login`. |
+| `AppLayout.tsx` | The protected shell. Renders `Sidebar` + `Header` and an `<Outlet />` where the active page lands. |
+
+#### `components/ProtectedRoute.tsx`
+Guards routes. Shows a loading state while auth is initializing, redirects to `/login` if there's no user, otherwise renders `children` or `<Outlet />`. Used as a wrapper route in `App.tsx`.
+
+### `src/context/AuthContext.tsx`
+The auth state machine for the app:
+- holds `user`, `isAuthenticated`, `isLoading` in React state
+- exposes `login(payload)` and `logout()`
+- on mount, rehydrates user/token from `localStorage`
+- on `login`, calls `authService.login`, persists the token + refresh token + user, and updates state
+- on `logout`, calls `authService.logout`, clears storage, resets state
+
+Consumed via `useAuthContext()` (or its alias `useAuth()`).
+
+### `src/hooks/useAuth.ts`
+Re-exports `useAuthContext` as `useAuth`. Use this in components — it's the public API.
+
+### `src/services/authService.ts`
+The only place that knows the URL and shape of `/auth/*` endpoints. Implements the `IAuthService` interface. Methods: `login`, `refresh`, `me`, `logout`. Each one calls `apiClient` and unwraps the `{ success, message, data }` envelope.
+
+> **Pattern:** every backend resource gets its own service file (`leadsService.ts`, `campaignService.ts`, etc.). Components never call `axios` directly.
+
+### `src/lib/`
+Utility modules that depend on third-party libraries.
+
+| File | Role |
+|---|---|
+| `api-client.ts` | The axios instance. Attaches `Authorization: Bearer <token>` on every request. On 401, automatically calls `/auth/refresh`, retries the request, and coalesces concurrent refreshes so only one refresh request fires at a time. Forces a logout if refreshing fails. **The single most important file in the project.** |
+| `query-client.ts` | The TanStack Query client. Sets default `staleTime` and `retry`. Imported once in `App.tsx`. |
+| `nav-items.ts` | Sidebar navigation config — title, href, icon, optional children. Edit this to add/remove nav links. |
+| `utils.ts` | Just `cn(...inputs)` — the className helper combining `clsx` + `tailwind-merge`. Used by every UI component. |
+
+### `src/core/`
+Framework-agnostic. **No React imports here.** Pure TypeScript. If you ever extracted a backend SDK from this app, you'd lift this folder out.
+
+| Folder | What lives here |
+|---|---|
+| `core/types/` | Plain TS types/interfaces for API payloads (e.g. `authTypes.ts` defines `User`, `LoginRequest`, `LoginResponse`, `ApiEnvelope<T>`, `RefreshResponseData`, etc.). |
+| `core/interfaces/` | Service and context contracts (e.g. `IAuthService`, `IAuthContext`, `IProtectedRoute`). Defining these forces every implementation to share the same shape, which is gold during refactors. |
+| `core/constants/` | App-wide constants — `AUTH_TOKEN_KEY`, `AUTH_REFRESH_TOKEN_KEY`, `AUTH_USER_KEY`. Never hardcode storage keys; reuse these. |
+| `core/enums/` | Shared enums (currently empty — add as needed: `Role`, `Status`, etc.). |
+| `core/utils/` | Pure helpers with no library dependencies (currently empty). |
+
+### Storage keys
+The app writes three keys to `localStorage`:
+- `auth_token` — current access token (short-lived)
+- `auth_refresh_token` — refresh token (long-lived)
+- `auth_user` — JSON of the currently logged-in user
+
+All three are defined in `core/constants/constants.ts` — never hardcode them.
+
+---
+
 ## Prerequisites
 
 - **Node.js 20+** (Node 18 works but 20 is recommended)
